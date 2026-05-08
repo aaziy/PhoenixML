@@ -1,0 +1,15 @@
+scikit-learn>=1.4
+xgboost>=2.0
+mlflow>=2.13
+dagshub>=0.3
+evidently>=0.4
+fastapi>=0.111
+uvicorn[standard]>=0.29
+pandas>=2.2
+numpy>=1.26
+kaggle>=1.6
+pydantic>=2.7
+pydantic-settings>=2.3
+requests>=2.32
+python-dotenv>=1.0
+PyYAML>=6.0

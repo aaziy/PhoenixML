@@ -1,0 +1,37 @@
+mlflow:
+  experiment_train: "fraud-detector-training"
+  experiment_monitor: "fraud-detector-monitoring"
+  registered_model_name: "fraud-detector"
+  staging_alias: "Staging"
+  production_alias: "Production"
+
+data:
+  dataset_slug: "mlg-ulb/creditcardfraud"
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  train_frac: 0.70
+  eval_frac: 0.15
+  # last 15% becomes the production batch pool
+  n_prod_batches: 10
+  batch_size: 2000
+  target_col: "Class"
+
+model:
+  random_state: 42
+  logreg_max_iter: 1000
+  logreg_solver: "lbfgs"
+
+thresholds:
+  prauc_alert: 0.75       # retrain if PR-AUC drops below this
+  prauc_promote_delta: 0.01  # challenger must beat champion by at least this
+  predict_cutoff: 0.5     # /predict probability threshold (tuned after baseline)
+
+drift:
+  drift_share_threshold: 0.5  # Evidently: flag if >50% of features drift
+
+slack:
+  webhook_env_var: "SLACK_WEBHOOK_URL"
+
+github:
+  repo_env_var: "GITHUB_REPO"
+  dispatch_event_type: "retrain"

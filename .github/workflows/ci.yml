@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check src/ tests/
+
+      - name: Black format check
+        run: black --check src/ tests/
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        env:
+          MLFLOW_TRACKING_URI: "http://localhost:5000"   # offline for CI
+          MLFLOW_TRACKING_USERNAME: "ci"
+          MLFLOW_TRACKING_PASSWORD: "ci"
+          KAGGLE_USERNAME: "ci"
+          KAGGLE_KEY: "ci"
