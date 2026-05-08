@@ -8,6 +8,7 @@ on:
       - "src/phoenixml/config.py"
       - "conf/config.yaml"
       - "requirements.txt"
+      - "docker/train.Dockerfile"
   repository_dispatch:
     types: [retrain]
   workflow_dispatch:
@@ -15,29 +16,69 @@ on:
 jobs:
   train:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
+      # Cache the raw CSV so Kaggle is only hit once per dataset version
       - name: Cache Kaggle dataset
+        id: kaggle-cache
         uses: actions/cache@v4
         with:
           path: data/raw/creditcard.csv
-          key: kaggle-creditcard-v1
+          key: kaggle-creditcard-mlg-ulb-v1
 
       - name: Install dependencies
-        run: pip install -r requirements.txt && pip install -e .
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Run training
+        id: train
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-        run: python -m phoenixml.train
+        run: |
+          python -m phoenixml.train 2>&1 | tee train_output.txt
+          # Capture run_id and PR-AUC for the job summary
+          RUN_ID=$(grep "MLflow run_id:" train_output.txt | awk '{print $NF}')
+          PRAUC=$(grep "Eval PR-AUC:" train_output.txt | awk '{print $4}')
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "prauc=$PRAUC" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          RUN_ID="${{ steps.train.outputs.run_id }}"
+          PRAUC="${{ steps.train.outputs.prauc }}"
+          TRIGGER="${{ github.event_name }}"
+          echo "## Training Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trigger | \`$TRIGGER\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| MLflow Run ID | \`$RUN_ID\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Eval PR-AUC | **$PRAUC** |" >> $GITHUB_STEP_SUMMARY
+          echo "| MLflow UI | [${{ secrets.MLFLOW_TRACKING_URI }}](${{ secrets.MLFLOW_TRACKING_URI }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Model registered as \`fraud-detector\` → **Staging** ✅" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload training log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: train-log-${{ github.run_number }}
+          path: train_output.txt
+          retention-days: 30

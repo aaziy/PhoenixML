@@ -1,0 +1,16 @@
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+data/
+notebooks/
+.env
+*.env
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+mlruns/
+mlartifacts/
