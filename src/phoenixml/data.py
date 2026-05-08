@@ -39,12 +39,11 @@ def download_dataset(settings: Settings | None = None) -> Path:
         os.environ.setdefault("KAGGLE_KEY", cfg.kaggle_key)
 
     try:
-        from kaggle.api.kaggle_api_extended import KaggleApiExtended  # type: ignore
+        from kaggle import api as kaggle_api  # type: ignore
 
-        api = KaggleApiExtended()
-        api.authenticate()
+        kaggle_api.authenticate()
         logger.info("Downloading dataset %s …", cfg.dataset_slug)
-        api.dataset_download_files(cfg.dataset_slug, path=str(raw_dir), unzip=False)
+        kaggle_api.dataset_download_files(cfg.dataset_slug, path=str(raw_dir), unzip=False)
     except Exception as e:
         raise RuntimeError(
             f"Kaggle download failed: {e}\n"
