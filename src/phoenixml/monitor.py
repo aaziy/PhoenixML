@@ -8,6 +8,7 @@ from typing import Any
 
 import mlflow
 import mlflow.sklearn
+import pandas as pd
 from sklearn.metrics import average_precision_score
 
 from phoenixml.config import Settings, get_settings
@@ -16,6 +17,24 @@ from phoenixml.drift import compute_drift
 from phoenixml.notify import send_alert
 
 logger = logging.getLogger(__name__)
+
+
+# ── Scoring helper (reused by simulate_drift) ─────────────────────────────────
+
+
+def score_batch(
+    model,
+    batch_df: pd.DataFrame,
+    feature_cols: list[str],
+    target_col: str,
+) -> float:
+    """Score a single batch and return PR-AUC (0.0 if no positive labels)."""
+    X = batch_df[feature_cols].values
+    y = batch_df[target_col].values
+    if y.sum() == 0:
+        return 0.0
+    proba = model.predict_proba(X)[:, 1]
+    return float(average_precision_score(y, proba))
 
 
 # ── MLflow helpers ────────────────────────────────────────────────────────────
@@ -121,17 +140,9 @@ def run_monitor(
     model, model_version = _load_production_model(cfg)
 
     # ── Score batch ───────────────────────────────────────────────────────────
-    X_batch = batch_df[feature_cols].values
-    y_batch = batch_df[cfg.target_col].values
-
-    if y_batch.sum() == 0:
-        logger.warning(
-            "Batch %d has no positive labels — PR-AUC undefined, setting to 0.", batch_id
-        )
-        prauc = 0.0
-    else:
-        y_proba = model.predict_proba(X_batch)[:, 1]
-        prauc = float(average_precision_score(y_batch, y_proba))
+    prauc = score_batch(model, batch_df, feature_cols, cfg.target_col)
+    if prauc == 0.0:
+        logger.warning("Batch %d has no positive labels — PR-AUC set to 0.", batch_id)
 
     logger.info(
         "Batch %d PR-AUC: %.4f (threshold: %.2f)", batch_id, prauc, cfg.prauc_alert_threshold

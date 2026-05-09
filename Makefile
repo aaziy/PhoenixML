@@ -41,8 +41,12 @@ api:
 	uvicorn phoenixml.api:app --host 0.0.0.0 --port 8000 --reload
 
 # ── drift simulation ───────────────────────────────────────────────────────
+# make simulate                              → full 10-batch run (live Slack + dispatch)
+# make simulate ARGS="--dry-run"             → same but no Slack / no dispatch
+# make simulate ARGS="--max-noise 5.0"       → stronger perturbation
+# make simulate ARGS="--dry-run --stop-on-alert"
 simulate:
-	python -m phoenixml.simulate_drift
+	python -m phoenixml.simulate_drift $(ARGS)
 
 # ── tests + lint ───────────────────────────────────────────────────────────
 test:
