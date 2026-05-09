@@ -182,6 +182,7 @@ def run_monitor(
     )
 
     # ── Slack alert ───────────────────────────────────────────────────────────
+    promote_url = f"https://github.com/{cfg.github_repo}/actions/workflows/promote.yml"
     if trigger_retrain:
         send_alert(
             batch_id=batch_id,
@@ -191,6 +192,7 @@ def run_monitor(
             drift_share=drift_share,
             run_url=run_url,
             trigger_retrain=trigger_retrain,
+            promote_url=promote_url,
             settings=cfg,
         )
         _fire_retrain_dispatch(cfg)

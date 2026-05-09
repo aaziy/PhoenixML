@@ -23,6 +23,7 @@ def _build_alert_payload(
     run_url: str,
     prauc_threshold: float,
     trigger_retrain: bool,
+    promote_url: str = "",
 ) -> dict:
     """Build a rich Slack Block Kit payload for a monitoring alert."""
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -31,11 +32,12 @@ def _build_alert_payload(
     prauc_icon = "⚠️" if prauc < prauc_threshold else "✅"
 
     header = f"{status_icon} PhoenixML Monitor — Batch {batch_id}"
-    retrain_line = (
-        "*Action:* 🔄 Retrain triggered → challenger will be registered to Staging"
-        if trigger_retrain
-        else "*Action:* No retrain needed"
-    )
+    if trigger_retrain:
+        retrain_line = "*Action:* 🔄 Retrain triggered → challenger will be registered to Staging"
+        if promote_url:
+            retrain_line += f"\nOnce retrain completes, <{promote_url}|approve Promotion here>."
+    else:
+        retrain_line = "*Action:* No retrain needed"
 
     return {
         "blocks": [
@@ -74,7 +76,19 @@ def _build_alert_payload(
                         "text": {"type": "plain_text", "text": "View MLflow Run"},
                         "url": run_url,
                         "style": "primary",
-                    }
+                    },
+                    *(
+                        [
+                            {
+                                "type": "button",
+                                "text": {"type": "plain_text", "text": "Approve Promotion"},
+                                "url": promote_url,
+                                "style": "danger",
+                            }
+                        ]
+                        if promote_url
+                        else []
+                    ),
                 ],
             },
         ]
@@ -90,6 +104,7 @@ def send_alert(
     drift_share: float,
     run_url: str,
     trigger_retrain: bool,
+    promote_url: str = "",
     settings: Settings | None = None,
 ) -> bool:
     """Send a monitoring alert to Slack. Returns True on success."""
@@ -108,6 +123,7 @@ def send_alert(
         run_url=run_url,
         prauc_threshold=cfg.prauc_alert_threshold,
         trigger_retrain=trigger_retrain,
+        promote_url=promote_url,
     )
 
     try:

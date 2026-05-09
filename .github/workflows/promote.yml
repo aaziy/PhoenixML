@@ -1,0 +1,85 @@
+name: Promote
+
+on:
+  workflow_dispatch:
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production          # ← requires manual approval in GitHub UI
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Cache Kaggle dataset
+        uses: actions/cache@v4
+        with:
+          path: data/raw/creditcard.csv
+          key: kaggle-creditcard-mlg-ulb-v1
+
+      - name: Cache processed splits
+        uses: actions/cache@v4
+        with:
+          path: data/processed/
+          key: processed-splits-v1
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run promotion gate
+        id: promote
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python -m phoenixml.promote 2>&1 | tee promote_output.txt
+          PROMOTED=$(grep "promoted:" promote_output.txt | awk '{print $2}')
+          STAGING_VER=$(grep "staging_version:" promote_output.txt | awk '{print $2}')
+          STAGING_PRAUC=$(grep "staging_prauc:" promote_output.txt | awk '{print $2}')
+          PROD_VER=$(grep "production_version:" promote_output.txt | awk '{print $2}')
+          PROD_PRAUC=$(grep "production_prauc:" promote_output.txt | awk '{print $2}')
+          DELTA=$(grep "delta:" promote_output.txt | awk '{print $2}')
+          echo "promoted=$PROMOTED"         >> "$GITHUB_OUTPUT"
+          echo "staging_ver=$STAGING_VER"   >> "$GITHUB_OUTPUT"
+          echo "staging_prauc=$STAGING_PRAUC" >> "$GITHUB_OUTPUT"
+          echo "prod_ver=$PROD_VER"         >> "$GITHUB_OUTPUT"
+          echo "prod_prauc=$PROD_PRAUC"     >> "$GITHUB_OUTPUT"
+          echo "delta=$DELTA"               >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          PROMOTED="${{ steps.promote.outputs.promoted }}"
+          ICON="✅"
+          [ "$PROMOTED" = "False" ] && ICON="❌"
+          echo "## Promote Run Summary  $ICON" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Promoted | \`$PROMOTED\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Staging version | \`${{ steps.promote.outputs.staging_ver }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Staging PR-AUC | \`${{ steps.promote.outputs.staging_prauc }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Production version | \`${{ steps.promote.outputs.prod_ver }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Production PR-AUC | \`${{ steps.promote.outputs.prod_prauc }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Δ PR-AUC | \`${{ steps.promote.outputs.delta }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload promote log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promote-log-${{ github.run_number }}
+          path: promote_output.txt
+          retention-days: 30
