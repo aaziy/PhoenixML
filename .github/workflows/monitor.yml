@@ -1,0 +1,87 @@
+name: Monitor
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:
+    inputs:
+      batch_id:
+        description: "Production batch index to monitor (0-based, 0-9)"
+        required: false
+        default: "0"
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Cache Kaggle dataset
+        uses: actions/cache@v4
+        with:
+          path: data/raw/creditcard.csv
+          key: kaggle-creditcard-mlg-ulb-v1
+
+      - name: Cache processed splits
+        uses: actions/cache@v4
+        with:
+          path: data/processed/
+          key: processed-splits-v1
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run monitor
+        id: monitor
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISPATCH_PAT: ${{ secrets.DISPATCH_PAT }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          BATCH_ID="${{ github.event.inputs.batch_id || '0' }}"
+          python -m phoenixml.monitor --batch-id "$BATCH_ID" 2>&1 | tee monitor_output.txt
+          PRAUC=$(grep "Batch.*PR-AUC:" monitor_output.txt | awk '{print $5}')
+          DRIFT=$(grep "drift_detected=" monitor_output.txt | awk -F'drift_detected=' '{print $2}' | awk '{print $1}')
+          RETRAIN=$(grep "trigger_retrain=" monitor_output.txt | awk -F'trigger_retrain=' '{print $2}' | awk '{print $1}')
+          echo "prauc=$PRAUC" >> "$GITHUB_OUTPUT"
+          echo "drift=$DRIFT" >> "$GITHUB_OUTPUT"
+          echo "retrain=$RETRAIN" >> "$GITHUB_OUTPUT"
+          echo "batch_id=$BATCH_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          PRAUC="${{ steps.monitor.outputs.prauc }}"
+          DRIFT="${{ steps.monitor.outputs.drift }}"
+          RETRAIN="${{ steps.monitor.outputs.retrain }}"
+          BATCH="${{ steps.monitor.outputs.batch_id }}"
+          echo "## Monitor Run Summary — Batch \`$BATCH\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| PR-AUC | \`$PRAUC\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Drift detected | \`$DRIFT\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Retrain triggered | \`$RETRAIN\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload monitor log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-log-batch-${{ steps.monitor.outputs.batch_id }}-run-${{ github.run_number }}
+          path: monitor_output.txt
+          retention-days: 30
