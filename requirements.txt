@@ -1,5 +1,5 @@
 scikit-learn>=1.4
-xgboost>=2.0
+# xgboost added in Phase 2 upgrade (out of scope for v0.1)
 mlflow>=2.13
 dagshub>=0.3
 evidently>=0.4
