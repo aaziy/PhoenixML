@@ -46,8 +46,7 @@ def download_dataset(settings: Settings | None = None) -> Path:
         kaggle_api.dataset_download_files(cfg.dataset_slug, path=str(raw_dir), unzip=False)
     except Exception as e:
         raise RuntimeError(
-            f"Kaggle download failed: {e}\n"
-            "Make sure KAGGLE_USERNAME and KAGGLE_KEY are set."
+            f"Kaggle download failed: {e}\n" "Make sure KAGGLE_USERNAME and KAGGLE_KEY are set."
         ) from e
 
     zip_candidates = list(raw_dir.glob("*.zip"))
@@ -78,8 +77,12 @@ def load_raw(settings: Settings | None = None) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     # Sort by the 'Time' column — seconds elapsed since first transaction
     df = df.sort_values("Time").reset_index(drop=True)
-    logger.info("Loaded %d rows, %d positives (%.4f%%)", len(df), df["Class"].sum(),
-                100 * df["Class"].mean())
+    logger.info(
+        "Loaded %d rows, %d positives (%.4f%%)",
+        len(df),
+        df["Class"].sum(),
+        100 * df["Class"].mean(),
+    )
     return df
 
 
@@ -103,7 +106,9 @@ def split_dataset(
 
     logger.info(
         "Split sizes — train: %d  eval: %d  prod_pool: %d",
-        len(train_df), len(eval_df), len(prod_pool_df),
+        len(train_df),
+        len(eval_df),
+        len(prod_pool_df),
     )
     return train_df, eval_df, prod_pool_df
 
