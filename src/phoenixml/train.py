@@ -134,11 +134,10 @@ def train_and_log(settings: Settings | None = None) -> str:
 
 
 def _transition_to_staging(cfg: Settings, run_id: str) -> None:
-    """Find the model version created from run_id and move it to Staging."""
+    """Find the model version created from run_id and set the 'Staging' alias."""
     client = mlflow.tracking.MlflowClient()
     versions = client.search_model_versions(f"name='{cfg.registered_model_name}'")
 
-    # find the version belonging to this run
     target = None
     for v in versions:
         if v.run_id == run_id:
@@ -149,14 +148,14 @@ def _transition_to_staging(cfg: Settings, run_id: str) -> None:
         logger.warning("Could not find registered version for run_id %s", run_id)
         return
 
-    client.transition_model_version_stage(
+    # MLflow 3.x: use aliases instead of deprecated stages
+    client.set_registered_model_alias(
         name=cfg.registered_model_name,
+        alias="Staging",
         version=target.version,
-        stage="Staging",
-        archive_existing_versions=False,
     )
     logger.info(
-        "Version %s of '%s' transitioned → Staging",
+        "Version %s of '%s' → alias 'Staging' set",
         target.version,
         cfg.registered_model_name,
     )

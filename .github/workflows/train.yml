@@ -52,7 +52,7 @@ jobs:
           python -m phoenixml.train 2>&1 | tee train_output.txt
           # Capture run_id and PR-AUC for the job summary
           RUN_ID=$(grep "MLflow run_id:" train_output.txt | awk '{print $NF}')
-          PRAUC=$(grep "Eval PR-AUC:" train_output.txt | awk '{print $4}')
+          PRAUC=$(grep "Eval PR-AUC:" train_output.txt | awk '{print $7}')
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "prauc=$PRAUC" >> "$GITHUB_OUTPUT"
 
